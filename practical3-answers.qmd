@@ -32,14 +32,14 @@ Before you start:
 #| message: false
 #| warning: false
 
-# Load the packages you need for this practical.
-# See the README for installation instructions if any of these are missing.
+# Load packages
 library(ggplot2)
 library(dplyr)
-library(tidyr)
 library(naniar)
 library(palmerpenguins)
 library(GGally)
+
+penguins
 ```
 
 ## Palmer Penguins
@@ -52,10 +52,15 @@ _You can use `naniar::gg_miss_upset(...)` or other functions you've come across 
 
 ```{r}
 #| label: inspect-missingness
-
+#| 
+naniar::miss_var_summary(penguins)
+naniar::vis_miss(penguins)
+naniar::gg_miss_upset(penguins)
 ```
 
+> Missingness is low overall (0.7% of all cells). There are two rows where most of the data is missing. A further 7 rows have sex missing.
 
+> If you’re interested in why some data is missing, check the penguins_raw dataset, in particular the Comments column.
 
 
 ### Question 2
@@ -65,9 +70,28 @@ Summarise the data variables in the dataset. What variables exist? What are thei
 ```{r}
 #| label: summarise-variables
 
+glimpse(penguins)
+summary(penguins)
+penguins |> count(species)
+penguins |> count(island)
+penguins |> count(sex)
+penguins |> count(year)
 ```
 
+> penguins has 344 rows and 8 columns, including:
 
+> Three categorical variables
+  - species: Adelie/Chinstrap/Gentoo
+  - island: Biscoe/Dream/Torgersen
+  - sex: female/male
+
+> Four continuous measurements
+  - bill_length_mm,bill_depth_mm
+  - flipper_length_mm
+  - body_mass_g
+  - year: 2007/2008/2009 (effectively categorical here even though it’s stored as a number).
+
+> Note that species is imbalanced (152 Adelie, 124 Gentoo, 68 Chinstrap).
 
 
 ## Basic Plotting
@@ -80,10 +104,11 @@ Using `geom_histogram()`, plot the distribution of `flipper_length_mm`. What sha
 #| label: histogram-flipper-length
 
 ggplot(penguins, aes(x = flipper_length_mm)) +
-  geom_histogram()
+  geom_histogram() +
+  theme_bw()
 ```
 
-
+> The distribution is not unimodal (e.g., like a bell curve). It looks to be bimodal, or even trimodal, with a cluster of shorter flippers (~180-195mm) and a separate cluster of longer flippers (~210-230mm), and a less distinct middle. This is a hint that flipper length differs systematically by some other variable in the data rather than representing one homogeneous population.
 
 
 ### Question 4
@@ -93,10 +118,26 @@ The default bin width is rarely ideal. Experiment with the `binwidth` argument i
 ```{r}
 #| label: histogram-binwidth
 
+ggplot(penguins, aes(x = flipper_length_mm)) +
+  geom_histogram(binwidth = 10) +
+  ggtitle("binwidth = 10") +
+  theme_bw()
+
+ggplot(penguins, aes(x = flipper_length_mm)) +
+  geom_histogram(binwidth = 2) +
+  ggtitle("binwidth = 2") +
+  theme_bw()
+
+ggplot(penguins, aes(x = flipper_length_mm)) +
+  geom_histogram(binwidth = 0.5) +
+  ggtitle("binwidth = 0.5") +
+  theme_bw()
 ```
 
-
-
+> Choice of bin width can hide or reveal structure in the data:
+- Too wide a bin (e.g. binwidth = 10, meaning collect in 10mm bins) smooths right over the multiple clusters and can make the data look unimodal.
+- A moderate bin width (e.g. binwidth = 2) is what reveals the multimodal shape clearly.
+- Too narrow a bin (e.g. binwidth = 0.5) startsshowing gaps and noise from individual measurement values.
 
 ### Question 5
 
@@ -105,12 +146,15 @@ Using `geom_bar()`, visualise the count of penguins belonging to each species. W
 ```{r}
 #| label: bar-species-count
 
-# ggplot(...) + geom_bar(aes(x = ... ))
+ggplot(penguins, aes(x = species)) +
+  geom_bar() +
+  scale_x_discrete("Species") +
+  scale_y_continuous("Count") +
+  theme_bw()
 
 ```
-
-
-
+> Adelie is the most common species (152 penguins), followed by Gentoo (124) and then Chinstrap 
+>(68, under half as many as Adelie).
 
 ### Question 6
 
@@ -119,9 +163,39 @@ Modify your bar chart to map the `fill` aesthetic to `island`. What does the res
 ```{r}
 #| label: bar-species-island
 
+# Stacked (default position = "stack")
+ggplot(penguins, aes(x = species, fill = island)) +
+  geom_bar() +
+  scale_x_discrete("Species") +
+  scale_y_continuous("Count") +
+  scale_fill_discrete("Island") +ggtitle("Stacked version") +theme_bw()
+
+# Dodged
+ggplot(penguins, aes(x = species, fill = island)) +
+  geom_bar(position = "dodge") +
+  scale_x_discrete("Species") +
+  scale_y_continuous("Count") +
+  scale_fill_discrete("Island") +
+  ggtitle("Dodged version") +
+  theme_bw()
+
+# Dodged version 2
+ggplot(penguins, aes(x = species, fill = island)) +
+  geom_bar(position = position_dodge(preserve = "single")) +
+  scale_x_discrete("Species") +
+  scale_y_continuous("Count") +
+  scale_fill_discrete("Island") +
+  ggtitle("Dodged 2.0") +
+  theme_bw()
+
 ```
 
+> Both charts show that species and island are not independent: Gentoo were only sampled on Biscoe, Chinstrap only on Dream, while Adelie were sampled on all three islands. This means island is confounded with species.
 
+>  Stacked: Better for showing the total count and how it is divided by island.
+>  Dodged: Better for directly comparing island counts across species.
+
+> Here, dodged is clearer for comparing groups, using position_dodge(preserve = "single") to avoid misleading bar widths.
 
 
 ### Question 7
@@ -131,7 +205,14 @@ Use `geom_boxplot()` to compare the distribution of `body_mass_g` across the thr
 ```{r}
 #| label: boxplot-mass-species
 
+ggplot(penguins, aes(x = species, y = body_mass_g)) +
+  geom_boxplot() +
+  scale_x_discrete("Species") +
+  scale_y_continuous("Body mass (g)") +
+  theme_bw()
 ```
+
+> Gentoo penguins are clearly heavier than Adelie and Chinstrap, whose distributions overlap quite a bit with each other.
 
 ### Question 8
 
@@ -140,9 +221,19 @@ Map the `fill` aesthetic in your previous boxplot to `sex`. What happens to the 
 ```{r}
 #| label: boxplot-mass-species-sex
 
+ggplot(penguins, aes(x = species, y = body_mass_g, fill = sex)) +
+  geom_boxplot() +
+  scale_x_discrete("Species") +
+  scale_y_continuous("Body mass (g)") +
+  scale_fill_discrete("Sex") +
+  theme_bw()
 ```
 
+> The number of boxes triples: instead of one box per species (3 boxes), we now get one box per species-sex combination.
 
+> We can see that within every species, males are likely to be heavier than females.
+
+> This pattern was invisible in the previous plot, where sex differences were averaged away inside each species’ single box.
 
 
 ### Question 9
@@ -152,14 +243,21 @@ Remove the missing values in the previous plot by filtering. Is this good practi
 ```{r}
 #| label: boxplot-remove-missing
 
-# add filter for other column with missing data
-penguins |> filter(is.na(sex))
-
-# Or (use carefully) look at tidyr::drop_na() 
+penguins |>
+  filter(!is.na(sex)) |>
+  ggplot(aes(x = species, y = body_mass_g, fill = sex)) +
+  geom_boxplot() +
+  scale_x_discrete("Species") +
+  scale_y_continuous("Body mass (g)") +
+  scale_fill_discrete("Sex") +
+  theme_bw()
 
 ```
 
-
+> Is it good practice, and when should you remove missing values? It depends!
+It is bad practice to remove NAs silently, without checking why values are missing or whether the missingness is related to some other variable of interest (e.g. if sex were harder to determine for smaller or younger birds, dropping those rows could bias comparisons, not just reduced the sample size).
+A safer strategy is to keep the missing values visible where possible, and only explicitly filter when you have a specific reason.
+Here, as we’re doing exploratory data analysis, including the NAs makes sense as we want to note their missingness. But in a polished report we may exclude NA rows and reference their removal in the text. It always depends on what you would like the plot to demonstrate to the reader. Ask yourself: “what story am I trying to tell?”
 
 
 ## Advanced Plotting
@@ -171,9 +269,19 @@ Recreate the above plot using `geom_point()`. Describe the overall relationship 
 ```{r}
 #| label: scatter-mass-species
 
+penguins |>
+  filter(!is.na(sex)) |>
+  ggplot(aes(x = species, y = body_mass_g, colour = sex)) +
+  geom_point(position = position_jitter(width = 0.2), alpha = 0.6) +
+  scale_x_discrete("Species") +
+  scale_y_continuous("Body mass (g)") +
+  scale_colour_discrete("Sex") +
+  theme_bw()
 ```
 
+> Using “jitter” moves the points horizontally a random amount, ensuring no data points are hidden. The same overall story as the boxplot holds: average body mass for Adelie and Chinstrap and approximately equal, whilst Gentoo is higher. Then within every species, the male points sit visibly higher than the female points, with some overlap.
 
+> The scatter also makes individual outliers and the density of points within each group more visible than the boxplot’s five-number summary does, at the cost of being a bit more cluttered to read at a glance. The boxplot also has the advantage of being able to read off the summary statistics (e.g. median and some quartiles).
 
 
 ### Question 11
@@ -183,9 +291,39 @@ Change the previous plot so that each species is plotted separately using `facet
 ```{r}
 #| label: facet-species
 
+penguins |>
+  filter(!is.na(sex)) |>
+  ggplot(aes(x = sex, y = body_mass_g, colour = sex)) +
+  geom_point(position = position_jitter(width = 0.2), alpha = 0.6) +
+  facet_wrap(~species) +
+  scale_x_discrete("Sex") +
+  scale_y_continuous("Body mass (g)") +
+  scale_colour_discrete("Sex") +
+  theme_bw()
 ```
 
+> It’s much easier to see the female vs male spread with the facet plots.
 
+> Facets become more appropriate when
+
+>   the number of groups grows (colour palettes get hard to distinguish past ~5-6 categories)
+    groups don’t overlap much so splitting them out loses little context
+    when overlapping points/ distributions from several groups would otherwise obscure each other (the case now)
+
+
+```{r}
+# Same plot as before, but letting each facet's y-axis scale independently
+penguins |>
+  filter(!is.na(sex)) |>
+  ggplot(aes(x = sex, y = body_mass_g, colour = sex)) +
+  geom_point(position = position_jitter(width = 0.2), alpha = 0.6) +
+  facet_wrap(~species, scales = "free") +
+  scale_x_discrete("Sex") +
+  scale_y_continuous("Body mass (g)") +
+  scale_colour_discrete("Sex") +
+  theme_bw()
+```
+> Using scales = "free" can be useful when the scales vary widely between facets, or the comparison is only required within each facet. It should always be used carefully and noted in the text describing the graph. Here it is highly likely to misrepresent the data! A quick glance makes it look as if Gentoo have similar body mass to Adelie and Chinstrap.
 
 
 ### Question 12
@@ -195,7 +333,10 @@ Use the `ggscatmat()` function from `GGally` to plot a scatter plot matrix of pa
 ```{r}
 #| label: scatmat-continuous
 
+GGally::ggscatmat(penguins, columns = c("bill_length_mm", "bill_depth_mm", "flipper_length_mm", "body_mass_g"))
 ```
+
+> The function ggscatmat yields, in one plot, every pairwise scatterplot between the four continuous variables (below the diagonal), each variable’s univariate density (on the diagonal), and each pairwise correlation coefficient (above the diagonal). It is a fast way to screen for pairwise relationships, without writing out six separate geom_point() calls by hand.
 
 ### Question 13
 
@@ -204,7 +345,16 @@ Add colouring by species to the `ggscatmat()` plot. From the plot, identify whic
 ```{r}
 #| label: scatmat-species-colour
 
+GGally::ggscatmat(
+  penguins,
+  columns = c("bill_length_mm", "bill_depth_mm", "flipper_length_mm", "body_mass_g"),
+  color = "species"
+)
 ```
 
+> Bill length and bill depth together appear to separate the three species most cleanly1.
 
+> Gentoo have shallow-but-long bills, Adelie have short-but-deep bills, and Chinstrap sit apart from Adelie mainly on bill length despite similar depth. The three species form three fairly distinct, only lightly-overlapping clusters on this pair.
+
+> In terms of anomalies; a small number of points sit outside their species’ otherwise tight cluster. These could be genuine anomalies (measurement error or individual variation) or related to a sub-populations like juveniles. During EDA you should flag and investigate such anomalies rather than ignoring or dropping them.
 
